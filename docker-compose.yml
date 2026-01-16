@@ -5,9 +5,9 @@ services:
       context: .
       dockerfile: ./infrastructures/gravitino/Dockerfile
       args:
-        - GRAVITINO_IMAGE_TAG=${GRAVITINO_IMAGE_TAG}
-        - HADOOP_AWS_JAR_VERSION=${HADOOP_AWS_JAR_VERSION}
-        - AWS_JAVA_SDK_BUNDLE_JAR_VERSION=${AWS_JAVA_SDK_BUNDLE_JAR_VERSION}
+        GRAVITINO_IMAGE_TAG: ${GRAVITINO_IMAGE_TAG}
+        HADOOP_AWS_JAR_VERSION: ${HADOOP_AWS_JAR_VERSION}
+        AWS_JAVA_SDK_BUNDLE_JAR_VERSION: ${AWS_JAVA_SDK_BUNDLE_JAR_VERSION}
     container_name: gravitino
     ports:
       - "8090:8090"
@@ -65,13 +65,13 @@ services:
       context: .
       dockerfile: ./infrastructures/spark/Dockerfile
       args:
-        - PYTHON_VERSION=${PYTHON_VERSION}
-        - SPARK_SCALA_VERSION=${SPARK_SCALA_VERSION}
-        - ICEBERG_VERSION=${ICEBERG_VERSION}
-        - SPARK_VERSION=${SPARK_VERSION}
-        - POSTGRESQL_JAR_VERSION=${POSTGRESQL_JAR_VERSION}
-        - HADOOP_AWS_JAR_VERSION=${HADOOP_AWS_JAR_VERSION}
-        - AWS_JAVA_SDK_BUNDLE_JAR_VERSION=${AWS_JAVA_SDK_BUNDLE_JAR_VERSION}
+        PYTHON_VERSION: ${PYTHON_VERSION}
+        SPARK_SCALA_VERSION: ${SPARK_SCALA_VERSION}
+        ICEBERG_VERSION: ${ICEBERG_VERSION}
+        SPARK_VERSION: ${SPARK_VERSION}
+        POSTGRESQL_JAR_VERSION: ${POSTGRESQL_JAR_VERSION}
+        HADOOP_AWS_JAR_VERSION: ${HADOOP_AWS_JAR_VERSION}
+        AWS_JAVA_SDK_BUNDLE_JAR_VERSION: ${AWS_JAVA_SDK_BUNDLE_JAR_VERSION}
     container_name: spark-master
     ports:
       - "8080:8080"
@@ -130,8 +130,8 @@ services:
     env_file:
       - .env
     environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: miniopass
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - ./infrastructures/minio/volumes/data/:/data
     command: server /data --address :9000 --console-address ':9002'
@@ -155,8 +155,9 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      /usr/bin/mc alias set myminio http://minio:9000 minio miniopass;
+      /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
       /usr/bin/mc mb myminio/iceberg --ignore-existing;
+      /usr/bin/mc mb myminio/iceberg/source --ignore-existing;
       /usr/bin/mc mb myminio/iceberg/warehouse --ignore-existing;
       /usr/bin/mc anonymous set public myminio/iceberg/warehouse;
       "
