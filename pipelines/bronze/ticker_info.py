@@ -1,8 +1,8 @@
-import pandas as pd
+import json
 from datetime import datetime
 import yfinance as yf
 from pyspark.sql.functions import lit
-from pyspark.sql.types import TimestampType, DateType
+from pyspark.sql.types import StructField, StructType, StringType, TimestampType, DateType
 from pyspark.sql import SparkSession
 
 TICKERS = [
@@ -19,18 +19,28 @@ TICKERS = [
 ]
 
 
-def main(period="1d", interval="1m"):
+def main():
     # Create Spark session
-    spark = SparkSession.builder.appName("MarketData").getOrCreate()
-    
-    data = pd.DataFrame()
+    spark = SparkSession.builder.appName("TickerInfoToJson").getOrCreate()
+
+
+    # Define Spark Table Schema
+    schema = StructType([
+        StructField("ticker", StringType(), False),
+        StructField("info", StringType(), True),
+    ])
+
+    data = []
     for ticker in TICKERS:
-        stock_data = yf.Ticker(ticker).history(period=period, interval=interval).reset_index()
-        stock_data['Ticker'] = ticker
-        data = pd.concat([data, stock_data], ignore_index=True)
+        data.append(
+            (   
+                ticker,
+                json.dumps(yf.Ticker(ticker).info),
+            )
+        )
     
     # Create Dataframe
-    df = spark.createDataFrame(data)
+    df = spark.createDataFrame(data, schema=schema)
     df = df.withColumn("load_dttm",  lit(datetime.now()).cast(TimestampType()))
     df = df.withColumn("load_prdt",  lit(datetime.now().date()).cast(DateType()))
 
@@ -41,7 +51,6 @@ def main(period="1d", interval="1m"):
         .option("mergeSchema", "true") \
         .saveAsTable(f"indonesia_capital_market_catalog.bronze.{__file__.split('/')[-1].split('.')[0]}")
 
-
 if __name__ == "__main__":
     # Load environment variables
     # load_dotenv(find_dotenv())
@@ -49,4 +58,4 @@ if __name__ == "__main__":
     # Prepare arguments
     bucket_name = "iceberg"
     content_type = "application/json"
-    main(period="1d", interval="1m")
+    main(bucket_name=bucket_name, content_type=content_type)
