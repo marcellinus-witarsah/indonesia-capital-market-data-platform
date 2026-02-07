@@ -20,16 +20,23 @@ TICKERS = [
 
 
 def main():
+    # -----------------------------------------------------------
     # Create Spark session
+    # -----------------------------------------------------------
     spark = SparkSession.builder.appName("TickerInfoToJson").getOrCreate()
 
 
+    # -----------------------------------------------------------
     # Define Spark Table Schema
+    # -----------------------------------------------------------
     schema = StructType([
         StructField("ticker", StringType(), False),
         StructField("info", StringType(), True),
     ])
 
+    # -----------------------------------------------------------
+    # Get data form source
+    # -----------------------------------------------------------
     data = []
     for ticker in TICKERS:
         data.append(
@@ -39,12 +46,16 @@ def main():
             )
         )
     
+    # -----------------------------------------------------------
     # Create Dataframe
+    # -----------------------------------------------------------
     df = spark.createDataFrame(data, schema=schema)
     df = df.withColumn("load_dttm",  lit(datetime.now()).cast(TimestampType()))
     df = df.withColumn("load_prdt",  lit(datetime.now().date()).cast(DateType()))
 
+    # -----------------------------------------------------------
     # Write to Iceberg Table
+    # -----------------------------------------------------------
     df.write.format("iceberg") \
         .partitionBy("load_prdt") \
         .mode("append") \
@@ -56,6 +67,4 @@ if __name__ == "__main__":
     # load_dotenv(find_dotenv())
     
     # Prepare arguments
-    bucket_name = "iceberg"
-    content_type = "application/json"
-    main(bucket_name=bucket_name, content_type=content_type)
+    main()

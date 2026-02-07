@@ -5,6 +5,28 @@ from pyspark.sql.types import TimestampType
 from pyspark.sql import SparkSession
 
 
+def get_partitioned_row_number(df, partition_cols, order_cols, order=None):
+    try:
+        if order == "asc":
+            df = (df.withColumn("row_number",row_number().over(
+                    Window.partitionBy(
+                        *[col(key) for key in partition_cols]
+                    )
+                    .orderBy(*[col(key).asc() for key in order_cols])
+                ))
+            )
+        elif order == "desc":
+            df = (df.withColumn("row_number",row_number().over(
+                    Window.partitionBy(
+                        *[col(key) for key in partition_cols]
+                    )
+                    .orderBy(*[col(key).desc() for key in order_cols])
+                ))
+            )
+    except Exception as e:
+        print(f"Error in get_partitioned_row_number: {e}")
+        raise e
+    return df
 
 
 def main():
@@ -23,26 +45,8 @@ def main():
     # Transformation logic
     # -----------------------------------------------------------
     # 1. Daily Returns: percentage change between the closing price and opening price of the day
-    partition_keys = ["ticker", "date"]
-    order_keys = ["datetime"]
-    df_daily_first_record = (
-        df.withColumn("row_number",row_number().over(
-            Window.partitionBy(
-                *[col(key) for key in partition_keys]
-            )
-            .orderBy(*[col(key).asc() for key in order_keys])
-        )).filter(col("row_number") == 1)
-    )
-
-    df_daily_last_record = (
-        df.withColumn("row_number",row_number().over(
-                Window.partitionBy(
-                    *[col(key) for key in partition_keys]
-                ).orderBy(*[col(key).desc() for key in order_keys])
-            )
-        ).filter(col("row_number") == 1)
-    )
-
+    df_daily_first_record = get_partitioned_row_number(df, ["ticker", "date"], ["datetime"], order="asc").filter(col("row_number") == 1)
+    df_daily_last_record = get_partitioned_row_number(df, ["ticker", "date"], ["datetime"], order="desc").filter(col("row_number") == 1)
     df_daily_returns = (
         df_daily_last_record.alias("daily_last_record")
         .join(
@@ -60,12 +64,11 @@ def main():
     # 2. Daily Volatility: standard deviation of the closing prices throughout the day
     df_daily_average_price_by_ticker_data = (
         df.alias("ticker_ohlcv_1m")
-            .groupBy(col("ticker_ohlcv_1m.ticker"), col("date"))
-            .agg(
-                avg(col("ticker_ohlcv_1m.close")).alias("avg_close"),
-            )
+        .groupBy(col("ticker_ohlcv_1m.ticker"), col("date"))
+        .agg(
+            avg(col("ticker_ohlcv_1m.close")).alias("avg_close"),
         )
-    
+    )
     df_sse = (
         df.alias("ticker_ohlcv_1m")
         .join(
@@ -84,7 +87,6 @@ def main():
             count(col("ticker_ohlcv_1m.ticker")).alias("n")
         )
     )
-
     df_daily_volatility = (
         df_sse
         .select(

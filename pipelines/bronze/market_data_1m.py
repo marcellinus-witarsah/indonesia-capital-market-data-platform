@@ -19,22 +19,28 @@ TICKERS = [
 ]
 
 
-def main(period="1d", interval="1m"):
-    # Create Spark session
+def main(period="1d"):
+    # -----------------------------------------------------------
+    # Create Spark Session
+    # -----------------------------------------------------------
     spark = SparkSession.builder.appName("MarketData").getOrCreate()
     
     data = pd.DataFrame()
     for ticker in TICKERS:
-        stock_data = yf.Ticker(ticker).history(period=period, interval=interval).reset_index()
+        stock_data = yf.Ticker(ticker).history(period=period, interval="1m").reset_index()
         stock_data['Ticker'] = ticker
         data = pd.concat([data, stock_data], ignore_index=True)
     
-    # Create Dataframe
+    # -----------------------------------------------------------
+    # Create Spark Dataframe
+    # -----------------------------------------------------------
     df = spark.createDataFrame(data)
     df = df.withColumn("load_dttm",  lit(datetime.now()).cast(TimestampType()))
     df = df.withColumn("load_prdt",  lit(datetime.now().date()).cast(DateType()))
 
+    # -----------------------------------------------------------
     # Write to Iceberg Table
+    # -----------------------------------------------------------
     df.write.format("iceberg") \
         .partitionBy("load_prdt") \
         .mode("append") \
@@ -45,8 +51,7 @@ def main(period="1d", interval="1m"):
 if __name__ == "__main__":
     # Load environment variables
     # load_dotenv(find_dotenv())
+
     
     # Prepare arguments
-    bucket_name = "iceberg"
-    content_type = "application/json"
-    main(period="1d", interval="1m")
+    main(period="1d")

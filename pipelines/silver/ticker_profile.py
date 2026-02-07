@@ -8,13 +8,16 @@ from pyspark.sql import SparkSession
 
 
 def main():
-    # Create Spark session
+    # -----------------------------------------------------------
+    # Create Spark Session
+    # -----------------------------------------------------------
     spark = SparkSession.builder.appName("TickerInfoToJson").getOrCreate()
 
 
+    # -----------------------------------------------------------
     # Define schema for parsing JSON string from `info` column
+    # -----------------------------------------------------------
     schema = StructType([
-
         # --- Company Info ---
         StructField("address1", StringType(), True),
         StructField("city", StringType(), True),
@@ -222,9 +225,14 @@ def main():
         StructField("corporateActions", ArrayType(StructType([])), True),
     ])
 
-    # Define Spark Table Schema
+    # -----------------------------------------------------------
+    # Load Spark Table
+    # -----------------------------------------------------------
     df = spark.table(f"indonesia_capital_market_catalog.bronze.ticker_info")
 
+    # -----------------------------------------------------------
+    # Transformation logic
+    # -----------------------------------------------------------
     df = (
         df.alias("ticker_info")
         .withColumn("parsed_info", from_json(col("ticker_info.info"), schema))
@@ -242,7 +250,9 @@ def main():
 
     df.createOrReplaceTempView("view_ticker_profile")
 
-    # Create Query for Upsert
+    # -----------------------------------------------------------
+    # Perform Upsert
+    # -----------------------------------------------------------
     query = f"""
     MERGE INTO indonesia_capital_market_catalog.silver.{__file__.split('/')[-1].split('.')[0]} AS target
     USING view_ticker_profile AS source

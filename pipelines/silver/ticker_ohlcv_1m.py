@@ -8,12 +8,19 @@ from pyspark.sql import SparkSession
 
 
 def main():
-    # Create Spark session
+    # -----------------------------------------------------------
+    # Create Spark Session
+    # -----------------------------------------------------------
     spark = SparkSession.builder.appName("silver_pipeline").getOrCreate()
 
-    # Define Spark Table Schema
-    df = spark.table(f"indonesia_capital_market_catalog.bronze.market_data")
+    # -----------------------------------------------------------
+    # Load Spark Table
+    # -----------------------------------------------------------
+    df = spark.table(f"indonesia_capital_market_catalog.bronze.market_data_1m")
 
+    # -----------------------------------------------------------
+    # Transformation logic
+    # -----------------------------------------------------------
     df = (
         df.alias("market_data")
         .select(
@@ -33,7 +40,9 @@ def main():
 
     df.createOrReplaceTempView("view_ticker_ohlcv_1m")
 
-    # Create Query for Upsert
+    # -----------------------------------------------------------
+    # Perform Upsert
+    # -----------------------------------------------------------
     query = f"""
     MERGE INTO indonesia_capital_market_catalog.silver.{__file__.split('/')[-1].split('.')[0]} AS target
     USING view_ticker_ohlcv_1m AS source
