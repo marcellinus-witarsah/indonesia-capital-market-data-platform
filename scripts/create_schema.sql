@@ -1,4 +1,0 @@
-USE indonesia_capital_market_catalog;
-CREATE DATABASE IF NOT EXISTS bronze;
-CREATE DATABASE IF NOT EXISTS silver;
-CREATE DATABASE IF NOT EXISTS gold;
