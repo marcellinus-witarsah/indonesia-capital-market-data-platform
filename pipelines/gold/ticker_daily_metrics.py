@@ -1,5 +1,6 @@
 from datetime import datetime
-from pyspark.sql.functions import lit, col, avg, to_date, sqrt, sum, min, max, avg, count, pow
+from pyspark.sql.functions import lit, col, avg, to_date, sqrt, sum, avg, count, pow, row_number
+from pyspark.sql import Window
 from pyspark.sql.types import TimestampType
 from pyspark.sql import SparkSession
 
@@ -7,82 +8,115 @@ from pyspark.sql import SparkSession
 
 
 def main():
-    # Create Spark session
+    # -----------------------------------------------------------
+    # Create Spark Session
+    # -----------------------------------------------------------
     spark = SparkSession.builder.appName("silver_pipeline").getOrCreate()
 
-    # Define Spark Table Schema
+    # -----------------------------------------------------------
+    # Load Spark Table
+    # -----------------------------------------------------------
     df = spark.table(f"indonesia_capital_market_catalog.silver.ticker_ohlcv_1m")
     df = df.withColumn("date", to_date(col("datetime"))) 
 
-    df_agg = (
-        df.alias("ticker_ohlcv_1m")
-        .groupBy(col("ticker_ohlcv_1m.ticker"), col("date"))
-        .agg(
-            max(col("ticker_ohlcv_1m.close")).alias("max_close"),
-            min(col("ticker_ohlcv_1m.open")).alias("min_open"),
-            avg(col("ticker_ohlcv_1m.close")).alias("avg_close"),
-        )
+    # -----------------------------------------------------------
+    # Transformation logic
+    # -----------------------------------------------------------
+    # 1. Daily Returns: percentage change between the closing price and opening price of the day
+    partition_keys = ["ticker", "date"]
+    order_keys = ["datetime"]
+    df_daily_first_record = (
+        df.withColumn("row_number",row_number().over(
+            Window.partitionBy(
+                *[col(key) for key in partition_keys]
+            )
+            .orderBy(*[col(key).asc() for key in order_keys])
+        )).filter(col("row_number") == 1)
     )
 
-    # For computing daily returns
-    df_metric_daily_returns = (
-        df_agg.alias("ticker_ohlcv_1d")
+    df_daily_last_record = (
+        df.withColumn("row_number",row_number().over(
+                Window.partitionBy(
+                    *[col(key) for key in partition_keys]
+                ).orderBy(*[col(key).desc() for key in order_keys])
+            )
+        ).filter(col("row_number") == 1)
+    )
+
+    df_daily_returns = (
+        df_daily_last_record.alias("daily_last_record")
+        .join(
+            df_daily_first_record.alias("daily_first_record"),
+            (col("daily_last_record.ticker") == col("daily_first_record.ticker")) & (col("daily_last_record.date") == col("daily_first_record.date")),
+            "inner"
+        )
         .select(
-            col("ticker_ohlcv_1d.ticker"),
-            col("ticker_ohlcv_1d.date"),
-            ((col("ticker_ohlcv_1d.max_close") - col("ticker_ohlcv_1d.min_open"))/col("ticker_ohlcv_1d.min_open")).alias("daily_returns"),
+            col("daily_last_record.ticker").alias("ticker"),
+            col("daily_last_record.date").alias("date"),
+            ((col("daily_last_record.close") - col("daily_first_record.open")) / col("daily_first_record.open")).alias("daily_returns")
         )
     )
 
-    # For computing volatility
+    # 2. Daily Volatility: standard deviation of the closing prices throughout the day
+    df_daily_average_price_by_ticker_data = (
+        df.alias("ticker_ohlcv_1m")
+            .groupBy(col("ticker_ohlcv_1m.ticker"), col("date"))
+            .agg(
+                avg(col("ticker_ohlcv_1m.close")).alias("avg_close"),
+            )
+        )
+    
     df_sse = (
         df.alias("ticker_ohlcv_1m")
         .join(
-            df_agg.alias("ticker_ohlcv_1d"),
-            (col("ticker_ohlcv_1m.ticker") == col("ticker_ohlcv_1d.ticker"))
-            & (col("ticker_ohlcv_1m.date") == col("ticker_ohlcv_1d.date")),
+            df_daily_average_price_by_ticker_data.alias("df_daily_average_price_by_ticker_data"),
+            (col("ticker_ohlcv_1m.ticker") == col("df_daily_average_price_by_ticker_data.ticker"))
+            & (col("ticker_ohlcv_1m.date") == col("df_daily_average_price_by_ticker_data.date")),
             "left"
         )
-        .withColumn("squared_differences", pow(col("ticker_ohlcv_1m.close") - col("ticker_ohlcv_1d.avg_close"), 2))
+        .withColumn("squared_differences", pow(col("ticker_ohlcv_1m.close") - col("df_daily_average_price_by_ticker_data.avg_close"), 2))
         .groupBy(
             col("ticker_ohlcv_1m.ticker"),
             col("ticker_ohlcv_1m.date")
         )
         .agg(
             sum(col("squared_differences")).alias("sum_squared_errors"),
-            count(col("ticker_ohlcv_1m.datetime")).alias("n")
+            count(col("ticker_ohlcv_1m.ticker")).alias("n")
         )
     )
 
-    df_metric_daily_volatility = (
+    df_daily_volatility = (
         df_sse
         .select(
             col("ticker"),
             col("date"),
             sqrt(col("sum_squared_errors") / col("n")).alias("daily_volatility"),
         )
-    )    
-
-    gold_df = (
-        df_metric_daily_returns.alias("metric_daily_returns")
-        .join(
-            df_metric_daily_volatility.alias("metric_daily_volatility"),
-            (col("metric_daily_returns.ticker") == col("metric_daily_volatility.ticker")) 
-            & (col("metric_daily_returns.date") == col("metric_daily_volatility.date")),
-            "left"
-        ).select(        
-            col("metric_daily_returns.ticker").alias("ticker"),
-            col("metric_daily_returns.date").alias("date"),
-            col("metric_daily_returns.daily_returns").alias("daily_returns"),
-            col("metric_daily_volatility.daily_volatility").alias("daily_volatility")
-        )
     )
 
+    # -----------------------------------------------------------
+    # Create Gold DataFrame
+    # -----------------------------------------------------------
+    gold_df = (
+        df_daily_returns.alias("daily_returns")
+        .join(
+            df_daily_volatility.alias("daily_volatility"),
+            (col("daily_returns.ticker") == col("daily_volatility.ticker")) 
+            & (col("daily_returns.date") == col("daily_volatility.date")),
+            "left"
+        ).select(        
+            col("daily_returns.ticker").alias("ticker"),
+            col("daily_returns.date").alias("date"),
+            col("daily_returns.daily_returns").alias("daily_returns"),
+            col("daily_volatility.daily_volatility").alias("daily_volatility")
+        )
+    )
     gold_df = gold_df.withColumn("load_dttm",  lit(datetime.now()).cast(TimestampType()))
-
     gold_df.createOrReplaceTempView("view_ticker_daily_metrics")
 
-    # Create Query for Upsert
+    # -----------------------------------------------------------
+    # Perform Upsert
+    # -----------------------------------------------------------
     query = f"""
         MERGE INTO indonesia_capital_market_catalog.gold.{__file__.split('/')[-1].split('.')[0]} AS target
         USING view_ticker_daily_metrics AS source
