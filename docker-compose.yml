@@ -84,6 +84,7 @@ services:
       - ./scripts/common.sh:/tmp/common.sh
       - ./infrastructures/spark/conf:/tmp/conf
       - ./pipelines:/opt/spark/apps/pipelines
+      - ./scripts:/opt/spark/apps/scripts
       - ./infrastructures/spark/logs/:/opt/spark/spark-events
     depends_on:
       gravitino:
