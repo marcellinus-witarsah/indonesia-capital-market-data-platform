@@ -5,34 +5,8 @@ CREATE DATABASE IF NOT EXISTS bronze;
 CREATE DATABASE IF NOT EXISTS silver;
 CREATE DATABASE IF NOT EXISTS gold;
 
--- CREATE TABLE IF NOT EXISTS for each layer
-
--- 1. Bronze Layer Tables
-CREATE TABLE IF NOT EXISTS bronze.ticker_info (
-    ticker STRING NOT NULL,
-    info STRING,
-    load_dttm TIMESTAMP,
-    load_prdt DATE
-)
-USING iceberg;
-
-CREATE TABLE IF NOT EXISTS bronze.market_data (
-    Datetime TIMESTAMP,
-    Open DOUBLE,
-    High DOUBLE,
-    Low DOUBLE,
-    Close DOUBLE,
-    Volume BIGINT,
-    Dividends DOUBLE,
-    `Stock Splits` DOUBLE,
-    Ticker STRING,
-    load_dttm TIMESTAMP,
-    load_prdt DATE
-)
-USING iceberg;
-
-
--- 2. Silver Layer Tables
+-- CREATE TABLE IF NOT EXISTS for each silver and gold layer
+-- 1. Silver Layer Tables
 
 CREATE TABLE IF NOT EXISTS silver.ticker_profile (
     ticker STRING,
@@ -54,7 +28,7 @@ CREATE TABLE IF NOT EXISTS silver.ticker_ohlcv_1m (
 )
 USING iceberg;
 
--- 3. Gold Layer Tables
+-- 2. Gold Layer Tables
 CREATE TABLE IF NOT EXISTS gold.ticker_daily_metrics (
     ticker STRING,
     date DATE,
