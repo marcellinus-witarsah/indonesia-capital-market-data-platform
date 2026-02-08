@@ -1,5 +1,5 @@
 # Install Image with Python Version 3.10.11
-ARG PYTHON_VERSION=3.10.11
+ARG PYTHON_VERSION
 FROM python:${PYTHON_VERSION}-bullseye AS spark-base
 
 RUN apt-get update && \
