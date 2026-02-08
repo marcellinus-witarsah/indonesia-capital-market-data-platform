@@ -4,10 +4,11 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Create handlers
+# Create handlers for determining where the logs will go to
+# in this case, we will log to the console (print)
 console_handler = logging.StreamHandler()
 
-# Create a formatter
+# Create a formatter for describing the log output format
 formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 
 # Set formatter for handlers
