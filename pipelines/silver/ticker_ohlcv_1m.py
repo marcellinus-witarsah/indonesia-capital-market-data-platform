@@ -1,45 +1,56 @@
 import json
 from datetime import datetime
+
 import yfinance as yf
-from pyspark.sql.functions import lit, col, to_timestamp
-from pyspark.sql.types import TimestampType
 from pyspark.sql import SparkSession
-from utils.logger import logger
+from pyspark.sql.functions import col, lit, to_timestamp
+from pyspark.sql.types import TimestampType
+
+from src.utils.iceberg_table_operations import IcebergTableOperations
+from src.utils.logger import logger
 
 
-
-def main():
+def main(start_date, end_date):
     try:
         # -----------------------------------------------------------
         # Create Spark Session
         # -----------------------------------------------------------
         spark = SparkSession.builder.appName("silver_pipeline").getOrCreate()
         logger.info("Spark Session created successfully.")
-        
+
+        # -----------------------------------------------------------
+        # Instantiate Iceberg Table Operations
+        # -----------------------------------------------------------
+        iceberg_table_ops = IcebergTableOperations(spark)
+
         # -----------------------------------------------------------
         # Load Spark Table
         # -----------------------------------------------------------
-        df = spark.table(f"indonesia_capital_market_catalog.bronze.market_data_1m")
+        df = iceberg_table_ops.get_latest_record(
+            "indonesia_capital_market_catalog.bronze.market_data_1m",
+            ["Ticker", "Datetime"],
+            ["load_dttm"],
+            True,
+            start_date,
+            end_date,
+        )
         logger.info("Spark table loaded successfully.")
 
         # -----------------------------------------------------------
         # Transformation logic
         # -----------------------------------------------------------
-        df = (
-            df.alias("market_data")
-            .select(
-                col("market_data.Ticker").alias("ticker"),
-                col("market_data.Datetime").alias("datetime"),
-                col("market_data.Open").alias("open"),
-                col("market_data.High").alias("high"),
-                col("market_data.Low").alias("low"),
-                col("market_data.Close").alias("close"),
-                col("market_data.Volume").alias("volume"),
-                col("market_data.Dividends").alias("dividends"),
-                col("market_data.`Stock Splits`").alias("stock_splits"),
-            )
+        df = df.alias("market_data").select(
+            col("market_data.Ticker").alias("ticker"),
+            col("market_data.Datetime").alias("datetime"),
+            col("market_data.Open").alias("open"),
+            col("market_data.High").alias("high"),
+            col("market_data.Low").alias("low"),
+            col("market_data.Close").alias("close"),
+            col("market_data.Volume").alias("volume"),
+            col("market_data.Dividends").alias("dividends"),
+            col("market_data.`Stock Splits`").alias("stock_splits"),
         )
-        df = df.withColumn("load_dttm",  lit(datetime.now()).cast(TimestampType()))
+        df = df.withColumn("load_dttm", lit(datetime.now()).cast(TimestampType()))
         logger.info("Data transformation completed.")
 
         # -----------------------------------------------------------
@@ -66,8 +77,8 @@ def main():
 if __name__ == "__main__":
     # Load environment variables
     # load_dotenv(find_dotenv())
-    
+
     # Prepare arguments
-    # bucket_name = "iceberg"
-    # content_type = "application/json"
-    main()
+    start_date = "2026-01-01"
+    end_date = "2026-12-31"
+    main(start_date, end_date)
