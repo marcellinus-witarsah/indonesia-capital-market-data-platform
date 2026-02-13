@@ -4,9 +4,17 @@ from datetime import datetime
 import yfinance as yf
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, from_json, lit
-from pyspark.sql.types import (ArrayType, BooleanType, DoubleType, IntegerType,
-                               LongType, StringType, StructField, StructType,
-                               TimestampType)
+from pyspark.sql.types import (
+    ArrayType,
+    BooleanType,
+    DoubleType,
+    IntegerType,
+    LongType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 
 from src.utils.iceberg_table_operations import IcebergTableOperations
 from src.utils.logger import logger

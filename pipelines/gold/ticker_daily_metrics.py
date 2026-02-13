@@ -1,38 +1,11 @@
 from datetime import datetime
 
-from pyspark.sql import SparkSession, Window
-from pyspark.sql.functions import (avg, col, count, lit, pow, row_number, sqrt,
-                                   sum, to_date)
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import avg, col, count, lit, pow, sqrt, sum, to_date
 from pyspark.sql.types import TimestampType
 
 from src.utils.iceberg_table_operations import IcebergTableOperations
 from src.utils.logger import logger
-
-
-def get_partitioned_row_number(df, partition_cols, order_cols, order=None):
-    try:
-        if order == "asc":
-            df = df.withColumn(
-                "row_number",
-                row_number().over(
-                    Window.partitionBy(*[col(key) for key in partition_cols]).orderBy(
-                        *[col(key).asc() for key in order_cols]
-                    )
-                ),
-            )
-        elif order == "desc":
-            df = df.withColumn(
-                "row_number",
-                row_number().over(
-                    Window.partitionBy(*[col(key) for key in partition_cols]).orderBy(
-                        *[col(key).desc() for key in order_cols]
-                    )
-                ),
-            )
-    except Exception as e:
-        print(f"Error in get_partitioned_row_number: {e}")
-        raise e
-    return df
 
 
 def main(start_date, end_date):
@@ -160,18 +133,18 @@ def main(start_date, end_date):
         )
         logger.info("Data transformation completed.")
 
-        # # -----------------------------------------------------------
-        # # Perform Upsert
-        # # -----------------------------------------------------------
-        # gold_df.createOrReplaceTempView("view_ticker_daily_metrics")
-        # query = f"""
-        #     MERGE INTO indonesia_capital_market_catalog.gold.{__file__.split('/')[-1].split('.')[0]} AS target
-        #     USING view_ticker_daily_metrics AS source
-        #     ON target.ticker = source.ticker
-        #     AND target.date = source.date
-        #     WHEN MATCHED THEN UPDATE SET *
-        #     WHEN NOT MATCHED THEN INSERT *;
-        # """
+        # -----------------------------------------------------------
+        # Perform Upsert
+        # -----------------------------------------------------------
+        gold_df.createOrReplaceTempView("view_ticker_daily_metrics")
+        query = f"""
+            MERGE INTO indonesia_capital_market_catalog.gold.{__file__.split('/')[-1].split('.')[0]} AS target
+            USING view_ticker_daily_metrics AS source
+            ON target.ticker = source.ticker
+            AND target.date = source.date
+            WHEN MATCHED THEN UPDATE SET *
+            WHEN NOT MATCHED THEN INSERT *;
+        """
 
         # Upsert to Iceberg Table
         spark.sql(query)

@@ -1,9 +1,7 @@
-import json
 from datetime import datetime
 
-import yfinance as yf
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, lit, to_timestamp
+from pyspark.sql.functions import col, lit
 from pyspark.sql.types import TimestampType
 
 from src.utils.iceberg_table_operations import IcebergTableOperations
