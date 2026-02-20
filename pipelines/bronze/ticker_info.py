@@ -1,7 +1,10 @@
+import argparse
 import json
+import os
 from datetime import datetime
 
 import yfinance as yf
+from dotenv import find_dotenv, load_dotenv
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import lit
 from pyspark.sql.types import (
@@ -14,21 +17,8 @@ from pyspark.sql.types import (
 
 from src.utils.logger import logger
 
-TICKERS = [
-    "BREN.JK",
-    "BBCA.JK",
-    "DSSA.JK",
-    "AMMN.JK",
-    "TPIA.JK",
-    "BYAN.JK",
-    "BBRI.JK",
-    "DCII.JK",
-    "BMRI.JK",
-    "TLKM.JK",
-]
 
-
-def main():
+def main(tickers):
     try:
         # -----------------------------------------------------------
         # Create Spark session
@@ -46,11 +36,11 @@ def main():
             ]
         )
 
-        # -----------------------------------------------------------
-        # Get data form source
-        # -----------------------------------------------------------
+        # # -----------------------------------------------------------
+        # # Get data form source
+        # # -----------------------------------------------------------
         data = []
-        for ticker in TICKERS:
+        for ticker in tickers:
             data.append(
                 (
                     ticker,
@@ -62,7 +52,7 @@ def main():
         # -----------------------------------------------------------
         # Create Dataframe
         # -----------------------------------------------------------
-        df = spark.createDataFrame(data, schema=schema)
+        df = spark.createDataFrame(data=data, schema=schema)
         df = df.withColumn("load_dttm", lit(datetime.now()).cast(TimestampType()))
         df = df.withColumn("load_prdt", lit(datetime.now().date()).cast(DateType()))
         logger.info("Spark DataFrame created successfully.")
@@ -73,7 +63,7 @@ def main():
         df.write.format("iceberg").partitionBy("load_prdt").mode("append").option(
             "mergeSchema", "true"
         ).saveAsTable(
-            f"indonesia_capital_market_catalog.bronze.{__file__.split('/')[-1].split('.')[0]}"
+            f"{os.getenv('CATALOG_NAME')}.bronze.{__file__.split('/')[-1].split('.')[0]}"
         )
         logger.info("Data written to Iceberg Table successfully.")
     except Exception as e:
@@ -83,7 +73,15 @@ def main():
 
 if __name__ == "__main__":
     # Load environment variables
-    # load_dotenv(find_dotenv())
+    load_dotenv(find_dotenv())
 
     # Prepare arguments
-    main()
+    parser = argparse.ArgumentParser(description="Ticker Info Ingestion Pipeline")
+    parser.add_argument(
+        "--ticker", nargs="+", help="The ticker symbol(s) to retrieve info for"
+    )
+    args = parser.parse_args()
+
+    # Insert arguments
+    tickers = args.ticker
+    main(tickers)

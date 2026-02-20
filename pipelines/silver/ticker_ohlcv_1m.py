@@ -1,5 +1,8 @@
+import argparse
+import os
 from datetime import datetime
 
+from dotenv import find_dotenv, load_dotenv
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, lit
 from pyspark.sql.types import TimestampType
@@ -10,22 +13,18 @@ from src.utils.logger import logger
 
 def main(start_date, end_date):
     try:
-        # -----------------------------------------------------------
         # Create Spark Session
-        # -----------------------------------------------------------
         spark = SparkSession.builder.appName("silver_pipeline").getOrCreate()
         logger.info("Spark Session created successfully.")
 
-        # -----------------------------------------------------------
         # Instantiate Iceberg Table Operations
-        # -----------------------------------------------------------
         iceberg_table_ops = IcebergTableOperations(spark)
 
         # -----------------------------------------------------------
-        # Load Spark Table
+        # Data Load
         # -----------------------------------------------------------
         df = iceberg_table_ops.get_latest_record(
-            "indonesia_capital_market_catalog.bronze.market_data_1m",
+            f"{os.getenv('CATALOG_NAME')}.bronze.market_data_1m",
             ["Ticker", "Datetime"],
             ["load_dttm"],
             True,
@@ -35,7 +34,7 @@ def main(start_date, end_date):
         logger.info("Spark table loaded successfully.")
 
         # -----------------------------------------------------------
-        # Transformation logic
+        # Data Transformation
         # -----------------------------------------------------------
         df = df.alias("market_data").select(
             col("market_data.Ticker").alias("ticker"),
@@ -49,14 +48,14 @@ def main(start_date, end_date):
             col("market_data.`Stock Splits`").alias("stock_splits"),
         )
         df = df.withColumn("load_dttm", lit(datetime.now()).cast(TimestampType()))
-        logger.info("Data transformation completed.")
+        logger.info(f"Data transformation completed.")
 
         # -----------------------------------------------------------
-        # Perform Upsert
+        # Data Upsert
         # -----------------------------------------------------------
         df.createOrReplaceTempView("view_ticker_ohlcv_1m")
         query = f"""
-        MERGE INTO indonesia_capital_market_catalog.silver.{__file__.split('/')[-1].split('.')[0]} AS target
+        MERGE INTO {os.getenv('CATALOG_NAME')}.silver.{__file__.split('/')[-1].split('.')[0]} AS target
         USING view_ticker_ohlcv_1m AS source
         ON target.ticker = source.ticker
         AND target.datetime = source.datetime
@@ -74,9 +73,20 @@ def main(start_date, end_date):
 
 if __name__ == "__main__":
     # Load environment variables
-    # load_dotenv(find_dotenv())
+    load_dotenv(find_dotenv())
 
     # Prepare arguments
-    start_date = "2026-01-01"
-    end_date = "2026-12-31"
+    parser = argparse.ArgumentParser(description="Ticker Info Ingestion Pipeline")
+    parser.add_argument(
+        "--start-date", type=str, help="The start date for market data retrieval"
+    )
+    parser.add_argument(
+        "--end-date", type=str, help="The end date for market data retrieval"
+    )
+    args = parser.parse_args()
+
+    # Insert arguments
+    start_date = args.start_date
+    end_date = args.end_date
+
     main(start_date, end_date)

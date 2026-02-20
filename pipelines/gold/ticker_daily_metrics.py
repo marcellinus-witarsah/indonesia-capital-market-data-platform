@@ -1,5 +1,8 @@
+import argparse
+import os
 from datetime import datetime
 
+from dotenv import find_dotenv, load_dotenv
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import avg, col, count, lit, pow, sqrt, sum, to_date
 from pyspark.sql.types import TimestampType
@@ -10,43 +13,34 @@ from src.utils.logger import logger
 
 def main(start_date, end_date):
     try:
-        # -----------------------------------------------------------
         # Create Spark Session
-        # -----------------------------------------------------------
         spark = SparkSession.builder.appName("silver_pipeline").getOrCreate()
         logger.info("Spark Session created successfully.")
 
-        # -----------------------------------------------------------
         # Instantiate Iceberg Table Operations
-        # -----------------------------------------------------------
         iceberg_table_ops = IcebergTableOperations(spark)
 
         # -----------------------------------------------------------
-        # Load Spark Table
+        # Data Load
         # -----------------------------------------------------------
-        df = iceberg_table_ops.get_latest_record(
-            "indonesia_capital_market_catalog.silver.ticker_ohlcv_1m",
-            partition_cols=["ticker", "datetime"],
-            order_cols=["load_dttm"],
-            filter_date_flag=True,
-            start_date=start_date,
-            end_date=end_date,
+        ticker_ohlcv_1m_df = spark.table(
+            f"{os.getenv('CATALOG_NAME')}.silver.ticker_ohlcv_1m"
+        ).filter(col("datetime").between(start_date, end_date))
+        ticker_ohlcv_1m_df = ticker_ohlcv_1m_df.withColumn(
+            "date", to_date(col("datetime"))
         )
-        df = df.withColumn("date", to_date(col("datetime")))
         logger.info("Spark Table loaded successfully.")
 
         # -----------------------------------------------------------
-        # Transformation logic
+        # Data Transformation
         # -----------------------------------------------------------
         # 1. Daily Returns: percentage change between the closing price and opening price of the day
         df_daily_first_record = iceberg_table_ops.get_partitioned_row_number(
-            df, ["ticker", "date"], ["datetime"], order="asc"
+            ticker_ohlcv_1m_df, ["ticker", "date"], ["datetime"], order="asc"
         ).filter(col("row_number") == 1)
-        df_daily_first_record.show()
         df_daily_last_record = iceberg_table_ops.get_partitioned_row_number(
-            df, ["ticker", "date"], ["datetime"], order="desc"
+            ticker_ohlcv_1m_df, ["ticker", "date"], ["datetime"], order="desc"
         ).filter(col("row_number") == 1)
-        df_daily_last_record.show()
 
         df_daily_returns = (
             df_daily_last_record.alias("daily_last_record")
@@ -67,26 +61,26 @@ def main(start_date, end_date):
         )
 
         # 2. Daily Volatility: standard deviation of the closing prices throughout the day
-        df_daily_average_price_by_ticker_data = (
-            df.alias("ticker_ohlcv_1m")
+        df_daily_average_price_by_ticker_date = (
+            ticker_ohlcv_1m_df.alias("ticker_ohlcv_1m")
             .groupBy(col("ticker_ohlcv_1m.ticker"), col("date"))
             .agg(
                 avg(col("ticker_ohlcv_1m.close")).alias("avg_close"),
             )
         )
         df_sse = (
-            df.alias("ticker_ohlcv_1m")
+            ticker_ohlcv_1m_df.alias("ticker_ohlcv_1m")
             .join(
-                df_daily_average_price_by_ticker_data.alias(
-                    "df_daily_average_price_by_ticker_data"
+                df_daily_average_price_by_ticker_date.alias(
+                    "df_daily_average_price_by_ticker_date"
                 ),
                 (
                     col("ticker_ohlcv_1m.ticker")
-                    == col("df_daily_average_price_by_ticker_data.ticker")
+                    == col("df_daily_average_price_by_ticker_date.ticker")
                 )
                 & (
                     col("ticker_ohlcv_1m.date")
-                    == col("df_daily_average_price_by_ticker_data.date")
+                    == col("df_daily_average_price_by_ticker_date.date")
                 ),
                 "left",
             )
@@ -94,7 +88,7 @@ def main(start_date, end_date):
                 "squared_differences",
                 pow(
                     col("ticker_ohlcv_1m.close")
-                    - col("df_daily_average_price_by_ticker_data.avg_close"),
+                    - col("df_daily_average_price_by_ticker_date.avg_close"),
                     2,
                 ),
             )
@@ -110,10 +104,8 @@ def main(start_date, end_date):
             sqrt(col("sum_squared_errors") / col("n")).alias("daily_volatility"),
         )
 
-        # -----------------------------------------------------------
         # Create Gold DataFrame
-        # -----------------------------------------------------------
-        gold_df = (
+        df = (
             df_daily_returns.alias("daily_returns")
             .join(
                 df_daily_volatility.alias("daily_volatility"),
@@ -128,17 +120,15 @@ def main(start_date, end_date):
                 col("daily_volatility.daily_volatility").alias("daily_volatility"),
             )
         )
-        gold_df = gold_df.withColumn(
-            "load_dttm", lit(datetime.now()).cast(TimestampType())
-        )
-        logger.info("Data transformation completed.")
+        df = df.withColumn("load_dttm", lit(datetime.now()).cast(TimestampType()))
+        logger.info(f"Data transformation completed")
 
         # -----------------------------------------------------------
-        # Perform Upsert
+        # Data Insertion
         # -----------------------------------------------------------
-        gold_df.createOrReplaceTempView("view_ticker_daily_metrics")
+        df.createOrReplaceTempView("view_ticker_daily_metrics")
         query = f"""
-            MERGE INTO indonesia_capital_market_catalog.gold.{__file__.split('/')[-1].split('.')[0]} AS target
+            MERGE INTO {os.getenv('CATALOG_NAME')}.gold.{__file__.split('/')[-1].split('.')[0]} AS target
             USING view_ticker_daily_metrics AS source
             ON target.ticker = source.ticker
             AND target.date = source.date
@@ -156,9 +146,19 @@ def main(start_date, end_date):
 
 if __name__ == "__main__":
     # Load environment variables
-    # load_dotenv(find_dotenv())
+    load_dotenv(find_dotenv())
 
     # Prepare arguments
-    start_date = "2026-01-01"
-    end_date = "2026-12-31"
+    parser = argparse.ArgumentParser(description="Ticker Info Ingestion Pipeline")
+    parser.add_argument(
+        "--start-date", type=str, help="The start date for market data retrieval"
+    )
+    parser.add_argument(
+        "--end-date", type=str, help="The end date for market data retrieval"
+    )
+    args = parser.parse_args()
+
+    # Insert arguments
+    start_date = args.start_date
+    end_date = args.end_date
     main(start_date, end_date)

@@ -1,7 +1,8 @@
-import json
+import argparse
+import os
 from datetime import datetime
 
-import yfinance as yf
+from dotenv import find_dotenv, load_dotenv
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, from_json, lit
 from pyspark.sql.types import (
@@ -22,15 +23,11 @@ from src.utils.logger import logger
 
 def main(start_date, end_date):
     try:
-        # -----------------------------------------------------------
         # Create Spark Session
-        # -----------------------------------------------------------
         spark = SparkSession.builder.appName("TickerInfoToJson").getOrCreate()
         logger.info("Spark Session created successfully.")
 
-        # -----------------------------------------------------------
         # Define schema for parsing JSON string from `info` column
-        # -----------------------------------------------------------
         schema = StructType(
             [
                 # --- Company Info ---
@@ -217,22 +214,14 @@ def main(start_date, end_date):
             ]
         )
 
-        # -----------------------------------------------------------
-        # Load Spark Table
-        # -----------------------------------------------------------
-        df = spark.table(f"indonesia_capital_market_catalog.bronze.ticker_info")
-        logger.info("Spark table loaded successfully.")
-
-        # -----------------------------------------------------------
         # Instantiate Iceberg Table Operations
-        # -----------------------------------------------------------
         iceberg_table_ops = IcebergTableOperations(spark)
 
         # -----------------------------------------------------------
-        # Load Spark Table
+        # Data Load
         # -----------------------------------------------------------
         df = iceberg_table_ops.get_latest_record(
-            "indonesia_capital_market_catalog.bronze.ticker_info",
+            f"{os.getenv('CATALOG_NAME')}.bronze.ticker_info",
             ["ticker"],
             ["load_dttm"],
             True,
@@ -242,7 +231,7 @@ def main(start_date, end_date):
         logger.info("Spark table loaded successfully.")
 
         # -----------------------------------------------------------
-        # Transformation logic
+        # Data Transformation
         # -----------------------------------------------------------
         df = (
             df.alias("ticker_info")
@@ -260,11 +249,11 @@ def main(start_date, end_date):
         logger.info("Data transformation completed.")
 
         # -----------------------------------------------------------
-        # Perform Upsert
+        # Data Ingestion
         # -----------------------------------------------------------
         df.createOrReplaceTempView("view_ticker_profile")
         query = f"""
-        MERGE INTO indonesia_capital_market_catalog.silver.{__file__.split('/')[-1].split('.')[0]} AS target
+        MERGE INTO {os.getenv('CATALOG_NAME')}.silver.{__file__.split('/')[-1].split('.')[0]} AS target
         USING view_ticker_profile AS source
         ON target.ticker = source.ticker
         WHEN MATCHED THEN UPDATE SET *
@@ -281,9 +270,20 @@ def main(start_date, end_date):
 
 if __name__ == "__main__":
     # Load environment variables
-    # load_dotenv(find_dotenv())
+    load_dotenv(find_dotenv())
 
     # Prepare arguments
-    start_date = "2026-01-01"
-    end_date = "2026-12-31"
+    parser = argparse.ArgumentParser(description="Ticker Info Ingestion Pipeline")
+    parser.add_argument(
+        "--start-date", type=str, help="The start date for market data retrieval"
+    )
+    parser.add_argument(
+        "--end-date", type=str, help="The end date for market data retrieval"
+    )
+    args = parser.parse_args()
+
+    # Insert arguments
+    start_date = args.start_date
+    end_date = args.end_date
+
     main(start_date, end_date)
