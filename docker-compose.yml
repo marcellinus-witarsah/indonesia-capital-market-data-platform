@@ -15,7 +15,6 @@ services:
     env_file:
       - .env
     volumes:
-      - ./scripts/common.sh:/tmp/common.sh
       - ./infrastructures/gravitino/conf:/tmp/conf
       - ./infrastructures/gravitino/healthcheck:/tmp/healthcheck
       - ./infrastructures/gravitino/volumes/data:/root/gravitino/data
@@ -81,7 +80,6 @@ services:
       - .env
       - ./infrastructures/spark/.env.spark
     volumes:
-      - ./scripts/common.sh:/tmp/common.sh
       - ./infrastructures/spark/conf:/tmp/conf
       - .:/root/spark/apps
       - ./infrastructures/spark/logs/:/opt/spark/spark-events
