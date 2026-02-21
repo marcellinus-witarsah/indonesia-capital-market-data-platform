@@ -5,7 +5,7 @@ from datetime import datetime
 from dotenv import find_dotenv, load_dotenv
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, lit
-from pyspark.sql.types import TimestampType
+from pyspark.sql.types import FloatType, StringType, TimestampType
 
 from src.utils.iceberg_table_operations import IcebergTableOperations
 from src.utils.logger import logger
@@ -36,16 +36,22 @@ def main(start_date, end_date):
         # -----------------------------------------------------------
         # Data Transformation
         # -----------------------------------------------------------
-        df = df.alias("market_data").select(
-            col("market_data.Ticker").alias("ticker"),
-            col("market_data.Datetime").alias("datetime"),
-            col("market_data.Open").alias("open"),
-            col("market_data.High").alias("high"),
-            col("market_data.Low").alias("low"),
-            col("market_data.Close").alias("close"),
-            col("market_data.Volume").alias("volume"),
-            col("market_data.Dividends").alias("dividends"),
-            col("market_data.`Stock Splits`").alias("stock_splits"),
+        df = (
+            df.alias("market_data")
+            .select(
+                col("market_data.Ticker").astype(StringType()).alias("ticker"),
+                col("market_data.Datetime").astype(TimestampType()).alias("datetime"),
+                col("market_data.Open").astype(FloatType()).alias("open"),
+                col("market_data.High").astype(FloatType()).alias("high"),
+                col("market_data.Low").astype(FloatType()).alias("low"),
+                col("market_data.Close").astype(FloatType()).alias("close"),
+                col("market_data.Volume").astype(FloatType()).alias("volume"),
+                col("market_data.Dividends").astype(FloatType()).alias("dividends"),
+                col("market_data.`Stock Splits`")
+                .astype(FloatType())
+                .alias("stock_splits"),
+            )
+            .distinct()
         )
         df = df.withColumn("load_dttm", lit(datetime.now()).cast(TimestampType()))
         logger.info(f"Data transformation completed.")

@@ -8,7 +8,7 @@ from pyspark.sql.functions import col, from_json, lit
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
-    DoubleType,
+    FloatType,
     IntegerType,
     LongType,
     StringType,
@@ -17,6 +17,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
+from utils.common_functions import string_cleanser
 from src.utils.iceberg_table_operations import IcebergTableOperations
 from src.utils.logger import logger
 
@@ -73,16 +74,16 @@ def main(start_date, end_date):
                 StructField("financialCurrency", StringType(), True),
                 StructField("symbol", StringType(), True),
                 # --- Prices ---
-                StructField("previousClose", DoubleType(), True),
-                StructField("open", DoubleType(), True),
-                StructField("dayLow", DoubleType(), True),
-                StructField("dayHigh", DoubleType(), True),
-                StructField("regularMarketPreviousClose", DoubleType(), True),
-                StructField("regularMarketOpen", DoubleType(), True),
-                StructField("regularMarketDayLow", DoubleType(), True),
-                StructField("regularMarketDayHigh", DoubleType(), True),
-                StructField("bid", DoubleType(), True),
-                StructField("ask", DoubleType(), True),
+                StructField("previousClose", FloatType(), True),
+                StructField("open", FloatType(), True),
+                StructField("dayLow", FloatType(), True),
+                StructField("dayHigh", FloatType(), True),
+                StructField("regularMarketPreviousClose", FloatType(), True),
+                StructField("regularMarketOpen", FloatType(), True),
+                StructField("regularMarketDayLow", FloatType(), True),
+                StructField("regularMarketDayHigh", FloatType(), True),
+                StructField("bid", FloatType(), True),
+                StructField("ask", FloatType(), True),
                 StructField("bidSize", LongType(), True),
                 StructField("askSize", LongType(), True),
                 # --- Volume ---
@@ -95,79 +96,79 @@ def main(start_date, end_date):
                 # --- Market Cap & Valuation ---
                 StructField("marketCap", LongType(), True),
                 StructField("enterpriseValue", LongType(), True),
-                StructField("priceToSalesTrailing12Months", DoubleType(), True),
-                StructField("priceToBook", DoubleType(), True),
+                StructField("priceToSalesTrailing12Months", FloatType(), True),
+                StructField("priceToBook", FloatType(), True),
                 # --- Dividends ---
-                StructField("dividendRate", DoubleType(), True),
-                StructField("dividendYield", DoubleType(), True),
+                StructField("dividendRate", FloatType(), True),
+                StructField("dividendYield", FloatType(), True),
                 StructField("exDividendDate", LongType(), True),
-                StructField("payoutRatio", DoubleType(), True),
-                StructField("fiveYearAvgDividendYield", DoubleType(), True),
-                StructField("trailingAnnualDividendRate", DoubleType(), True),
-                StructField("trailingAnnualDividendYield", DoubleType(), True),
-                StructField("lastDividendValue", DoubleType(), True),
+                StructField("payoutRatio", FloatType(), True),
+                StructField("fiveYearAvgDividendYield", FloatType(), True),
+                StructField("trailingAnnualDividendRate", FloatType(), True),
+                StructField("trailingAnnualDividendYield", FloatType(), True),
+                StructField("lastDividendValue", FloatType(), True),
                 StructField("lastDividendDate", LongType(), True),
                 # --- Risk & Performance ---
-                StructField("beta", DoubleType(), True),
-                StructField("trailingPE", DoubleType(), True),
-                StructField("forwardPE", DoubleType(), True),
-                StructField("trailingPegRatio", DoubleType(), True),
+                StructField("beta", FloatType(), True),
+                StructField("trailingPE", FloatType(), True),
+                StructField("forwardPE", FloatType(), True),
+                StructField("trailingPegRatio", FloatType(), True),
                 # --- Shares ---
                 StructField("floatShares", LongType(), True),
                 StructField("sharesOutstanding", LongType(), True),
                 StructField("impliedSharesOutstanding", LongType(), True),
-                StructField("heldPercentInsiders", DoubleType(), True),
-                StructField("heldPercentInstitutions", DoubleType(), True),
+                StructField("heldPercentInsiders", FloatType(), True),
+                StructField("heldPercentInstitutions", FloatType(), True),
                 # --- Financials ---
-                StructField("bookValue", DoubleType(), True),
+                StructField("bookValue", FloatType(), True),
                 StructField("totalCash", LongType(), True),
-                StructField("totalCashPerShare", DoubleType(), True),
+                StructField("totalCashPerShare", FloatType(), True),
                 StructField("totalDebt", LongType(), True),
-                StructField("debtToEquity", DoubleType(), True),
-                StructField("quickRatio", DoubleType(), True),
-                StructField("currentRatio", DoubleType(), True),
+                StructField("debtToEquity", FloatType(), True),
+                StructField("quickRatio", FloatType(), True),
+                StructField("currentRatio", FloatType(), True),
                 StructField("totalRevenue", LongType(), True),
-                StructField("revenuePerShare", DoubleType(), True),
+                StructField("revenuePerShare", FloatType(), True),
                 StructField("grossProfits", LongType(), True),
                 StructField("ebitda", LongType(), True),
                 StructField("freeCashflow", LongType(), True),
                 StructField("operatingCashflow", LongType(), True),
                 # --- Margins ---
-                StructField("profitMargins", DoubleType(), True),
-                StructField("grossMargins", DoubleType(), True),
-                StructField("ebitdaMargins", DoubleType(), True),
-                StructField("operatingMargins", DoubleType(), True),
+                StructField("profitMargins", FloatType(), True),
+                StructField("grossMargins", FloatType(), True),
+                StructField("ebitdaMargins", FloatType(), True),
+                StructField("operatingMargins", FloatType(), True),
                 # --- Growth ---
-                StructField("earningsGrowth", DoubleType(), True),
-                StructField("earningsQuarterlyGrowth", DoubleType(), True),
-                StructField("revenueGrowth", DoubleType(), True),
+                StructField("earningsGrowth", FloatType(), True),
+                StructField("earningsQuarterlyGrowth", FloatType(), True),
+                StructField("revenueGrowth", FloatType(), True),
                 # --- EPS ---
-                StructField("trailingEps", DoubleType(), True),
-                StructField("forwardEps", DoubleType(), True),
-                StructField("epsTrailingTwelveMonths", DoubleType(), True),
-                StructField("epsForward", DoubleType(), True),
-                StructField("epsCurrentYear", DoubleType(), True),
-                StructField("priceEpsCurrentYear", DoubleType(), True),
+                StructField("trailingEps", FloatType(), True),
+                StructField("forwardEps", FloatType(), True),
+                StructField("epsTrailingTwelveMonths", FloatType(), True),
+                StructField("epsForward", FloatType(), True),
+                StructField("epsCurrentYear", FloatType(), True),
+                StructField("priceEpsCurrentYear", FloatType(), True),
                 # --- Ranges ---
-                StructField("fiftyTwoWeekLow", DoubleType(), True),
-                StructField("fiftyTwoWeekHigh", DoubleType(), True),
-                StructField("allTimeHigh", DoubleType(), True),
-                StructField("allTimeLow", DoubleType(), True),
+                StructField("fiftyTwoWeekLow", FloatType(), True),
+                StructField("fiftyTwoWeekHigh", FloatType(), True),
+                StructField("allTimeHigh", FloatType(), True),
+                StructField("allTimeLow", FloatType(), True),
                 StructField("fiftyTwoWeekRange", StringType(), True),
                 StructField("regularMarketDayRange", StringType(), True),
                 # --- Averages ---
-                StructField("fiftyDayAverage", DoubleType(), True),
-                StructField("twoHundredDayAverage", DoubleType(), True),
-                StructField("fiftyDayAverageChange", DoubleType(), True),
-                StructField("fiftyDayAverageChangePercent", DoubleType(), True),
-                StructField("twoHundredDayAverageChange", DoubleType(), True),
-                StructField("twoHundredDayAverageChangePercent", DoubleType(), True),
+                StructField("fiftyDayAverage", FloatType(), True),
+                StructField("twoHundredDayAverage", FloatType(), True),
+                StructField("fiftyDayAverageChange", FloatType(), True),
+                StructField("fiftyDayAverageChangePercent", FloatType(), True),
+                StructField("twoHundredDayAverageChange", FloatType(), True),
+                StructField("twoHundredDayAverageChangePercent", FloatType(), True),
                 # --- Analyst ---
-                StructField("targetHighPrice", DoubleType(), True),
-                StructField("targetLowPrice", DoubleType(), True),
-                StructField("targetMeanPrice", DoubleType(), True),
-                StructField("targetMedianPrice", DoubleType(), True),
-                StructField("recommendationMean", DoubleType(), True),
+                StructField("targetHighPrice", FloatType(), True),
+                StructField("targetLowPrice", FloatType(), True),
+                StructField("targetMeanPrice", FloatType(), True),
+                StructField("targetMedianPrice", FloatType(), True),
+                StructField("recommendationMean", FloatType(), True),
                 StructField("recommendationKey", StringType(), True),
                 StructField("numberOfAnalystOpinions", IntegerType(), True),
                 StructField("averageAnalystRating", StringType(), True),
@@ -237,13 +238,24 @@ def main(start_date, end_date):
             df.alias("ticker_info")
             .withColumn("parsed_info", from_json(col("ticker_info.info"), schema))
             .select(
-                col("ticker_info.ticker"),
-                col("parsed_info.longName").alias("company_name"),
-                col("parsed_info.longBusinessSummary").alias("business_summary"),
-                col("parsed_info.currency").alias("currency"),
-                col("parsed_info.marketCap").alias("market_cap"),
-                col("parsed_info.industry").alias("industry"),
+                string_cleanser(col("ticker_info.ticker"))
+                .astype(StringType())
+                .alias("ticker"),
+                string_cleanser(col("parsed_info.longName"))
+                .astype(StringType())
+                .alias("company_name"),
+                string_cleanser(col("parsed_info.longBusinessSummary"))
+                .astype(StringType())
+                .alias("business_summary"),
+                string_cleanser(col("parsed_info.currency"))
+                .astype(StringType())
+                .alias("currency"),
+                col("parsed_info.marketCap").astype(FloatType()).alias("market_cap"),
+                string_cleanser(col("parsed_info.industry"))
+                .astype(StringType())
+                .alias("industry"),
             )
+            .distinct()
         )
         df = df.withColumn("load_dttm", lit(datetime.now()).cast(TimestampType()))
         logger.info("Data transformation completed.")
